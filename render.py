@@ -1,0 +1,114 @@
+#
+# Copyright (C) 2023, Inria
+# GRAPHDECO research group, https://team.inria.fr/graphdeco
+# All rights reserved.
+#
+# This software is free for non-commercial, research and evaluation use 
+# under the terms of the LICENSE.md file.
+#
+# For inquiries contact  george.drettakis@inria.fr
+#
+
+import torch
+from scene import Scene
+import os
+from tqdm import tqdm
+from os import makedirs
+from gaussian_renderer import render
+import torchvision
+from utils.general_utils import safe_state
+from argparse import ArgumentParser
+from arguments import ModelParams, PipelineParams, get_combined_args
+from gaussian_renderer import GaussianModel
+
+from utils.image_utils import psnr
+
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from torchmetrics.image import StructuralSimilarityIndexMeasure
+
+
+def ssim(img1, img2):
+    metric = StructuralSimilarityIndexMeasure(data_range=1.0)
+    return metric(img1, img2)
+
+
+def lpips(img1, img2):
+    metric = LearnedPerceptualImagePatchSimilarity(net_type='vgg')
+    return metric(img1, img2)
+
+
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
+    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
+    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
+
+    makedirs(render_path, exist_ok=True)
+    makedirs(gts_path, exist_ok=True)
+
+    num = 0
+    lpips_loss = 0
+    ssim_loss = 0
+    psnr_loss = 0
+
+    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        rendering = render(view, gaussians, pipeline, background)["render"]
+        gt = view.original_image[0:3, :, :]
+        print(view.image_name)
+
+        num += 1
+        print(rendering.device, gt.device)
+        print(rendering.shape, gt.shape)
+        distance = lpips(rendering.cpu().reshape([1, rendering.shape[0], rendering.shape[1], rendering.shape[2]]),
+                         gt.cpu().reshape([1, rendering.shape[0], rendering.shape[1], rendering.shape[2]]))
+        lpips_loss += distance
+        print(distance)
+
+        ssim_score = ssim(rendering.cpu().reshape([1, rendering.shape[0], rendering.shape[1], rendering.shape[2]]),
+                          gt.cpu().reshape([1, rendering.shape[0], rendering.shape[1], rendering.shape[2]]))
+        ssim_loss += ssim_score
+        print(ssim_score)
+
+        psnr_score = psnr(rendering, gt).mean().double()
+        psnr_loss += psnr_score
+        print(psnr_score)
+
+        torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+
+    print("psnr", psnr_loss / num)
+    print("ssim", ssim_loss / num)
+    print("lpips", lpips_loss / num)
+
+
+def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
+    with torch.no_grad():
+        gaussians = GaussianModel(dataset.sh_degree)
+        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False, train=False)
+
+        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+        if not skip_train:
+            render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline,
+                       background)
+
+        if not skip_test:
+            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline,
+                       background)
+
+
+if __name__ == "__main__":
+    # Set up command line argument parser
+    parser = ArgumentParser(description="Testing script parameters")
+    model = ModelParams(parser, sentinel=True)
+    pipeline = PipelineParams(parser)
+    parser.add_argument("--iteration", default=-1, type=int)
+    parser.add_argument("--skip_train", action="store_true")
+    parser.add_argument("--skip_test", action="store_true")
+    parser.add_argument("--quiet", action="store_true")
+    args = get_combined_args(parser)
+    print("Rendering " + args.model_path)
+
+    # Initialize system state (RNG)
+    safe_state(args.quiet)
+
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
