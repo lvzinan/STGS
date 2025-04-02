@@ -115,7 +115,7 @@ class Scene:
     def __init__(self, args: ModelParams, gaussians: GaussianModel, load_iteration=None, shuffle=True,
                  resolution_scales=[1.0], train=True, x_min=None, x_max=None, y_min=None, y_max=None, block=None,
                  vis_img=None, R_append=0.0,
-                 image_H=0, image_W=0, cam_append=0.25, batch_size=batch_size):
+                 image_H=0, image_W=0, cam_append=0.25, batch_size=250):
         """b
         :param path: Path to colmap scene main folder.
         """
