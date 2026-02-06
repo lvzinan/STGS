@@ -135,11 +135,11 @@ kSqrt03_112 = sqrt( 3.0 / 112.0)
 kSqrt15_112 = sqrt(15.0 / 112.0)
 
 def dp(n, a, b):
-    # 确保输入是张量
-    a = a[:,:,:n]  # 取前 n 个元素
-    b = b[:,:,:n]  # 取前 n 个元素
+    # Ensure input is tensor
+    a = a[:,:,:n]  # Take first n elements
+    b = b[:,:,:n]  # Take first n elements
 
-    result = (a * b).sum(dim=2)  # 计算点积并求和
+    result = (a * b).sum(dim=2)  # Compute dot product and sum
     return result
 
 def RotateSH(R, n, sh):

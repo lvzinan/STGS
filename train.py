@@ -21,7 +21,7 @@ import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
-from arguments import ModelParams, PipelineParams, OptimizationParams
+from arguments import ModelParams, PipelineParams, OptimizationParams, TrainingParams
 from utils.system_utils import searchForMaxIteration
 from plyfile import PlyData, PlyElement
 import numpy as np
@@ -455,28 +455,27 @@ if __name__ == "__main__":
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
     pp = PipelineParams(parser)
-    parser.add_argument('--ip', type=str, default="127.0.0.1")
-    parser.add_argument('--port', type=int, default=6009)
-    parser.add_argument('--debug_from', type=int, default=-1)
-    parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int,
-                        default=[3_000, 7_000, 30_000, 50_000, 70_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[10_000, 30_000, 70_000])
-    parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--start_checkpoint", type=str, default=None)
-    parser.add_argument("--num_block", nargs=2, type=int, default=[2, 2], help="Specify the number of blocks as n*m")
+    tp = TrainingParams(parser)
     args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
+    
+    # Extract parameter groups
+    model_params = lp.extract(args)
+    opt_params = op.extract(args)
+    pipe_params = pp.extract(args)
+    train_params = tp.extract(args)
+    
+    # Append final iteration to save_iterations
+    train_params.save_iterations.append(opt_params.iterations)
 
     # Initialize system state (RNG)
-    safe_state(args.quiet)
+    safe_state(train_params.quiet)
 
     # Start GUI server, configure and run training
-    network_gui.init(args.ip, args.port)
-    torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations,
-             args.checkpoint_iterations, args.start_checkpoint, args.debug_from, num_block=args.num_block)
+    network_gui.init(train_params.ip, train_params.port)
+    torch.autograd.set_detect_anomaly(train_params.detect_anomaly)
+    training(model_params, opt_params, pipe_params, train_params.test_iterations, train_params.save_iterations,
+             train_params.checkpoint_iterations, train_params.start_checkpoint, train_params.debug_from, 
+             num_block=train_params.num_block)
 
     # All done
     print("\nTraining complete.")

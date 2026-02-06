@@ -1,4 +1,4 @@
-name: gaussian_splatting
+name: stgs
 channels:
   - pytorch
   - conda-forge

@@ -29,11 +29,21 @@ class ParamGroup:
             if shorthand:
                 if t == bool:
                     group.add_argument("--" + key, ("-" + key[0:1]), default=value, action="store_true")
+                elif t == list:
+                    if key == "num_block":
+                        group.add_argument("--" + key, ("-" + key[0:1]), nargs=2, type=int, default=value, help="Specify the number of blocks as n*m")
+                    else:
+                        group.add_argument("--" + key, ("-" + key[0:1]), nargs="+", type=type(value[0]) if value else int, default=value)
                 else:
                     group.add_argument("--" + key, ("-" + key[0:1]), default=value, type=t)
             else:
                 if t == bool:
                     group.add_argument("--" + key, default=value, action="store_true")
+                elif t == list:
+                    if key == "num_block":
+                        group.add_argument("--" + key, nargs=2, type=int, default=value, help="Specify the number of blocks as n*m")
+                    else:
+                        group.add_argument("--" + key, nargs="+", type=type(value[0]) if value else int, default=value)
                 else:
                     group.add_argument("--" + key, default=value, type=t)
 
@@ -102,6 +112,20 @@ class OptimizationParams(ParamGroup):
         self.s_loss_iter1 = 10000
         self.s_loss_iter2 = 30000
         super().__init__(parser, "Optimization Parameters")
+
+class TrainingParams(ParamGroup):
+    def __init__(self, parser):
+        self.ip = "127.0.0.1"
+        self.port = 6009
+        self.debug_from = -1
+        self.detect_anomaly = False
+        self.test_iterations = [3_000, 7_000, 30_000, 50_000, 70_000]
+        self.save_iterations = [10_000, 30_000, 70_000]
+        self.quiet = False
+        self.checkpoint_iterations = []
+        self.start_checkpoint = None
+        self.num_block = [2, 2]
+        super().__init__(parser, "Training Parameters")
 
 def get_combined_args(parser : ArgumentParser):
     cmdlne_string = sys.argv[1:]
